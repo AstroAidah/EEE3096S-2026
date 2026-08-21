@@ -3,8 +3,8 @@
  * EEE3096S 2026 - Practical 1B, Task 5
  * 4-bit bit-banged HD44780 driver, and the level shifter timing fault
  *
- * Student 1 : <name>  <student number>
- * Student 2 : <name>  <student number>
+ * Student 1 : Mati Taimu  TMXMAT005
+ * Student 2 : Idah Sumbi  SMBIDA001
  */
 
     .syntax unified
@@ -39,10 +39,15 @@ LCD_Run:
     PUSH {LR}
 
     @ TODO 1: Wait for the LCD power rail to settle (consult datasheet).
+    MOVS R0, #50
+    BL   LCD_DelayLong
     
     @ TODO 2: Call the 4-bit initialization sequence.
+    BL   LCD_Init
     
     @ TODO 3: Write the character 'A' (0x41) to the display.
+    MOVS R0, #0x41
+    BL   LCD_WriteData
 
 hang:
     B    hang
@@ -60,7 +65,46 @@ LCD_Init:
     @ TODO 4: Send the 4-bit initialization sequence.
     @ Reference the HD44780 datasheet flowchart. 
     @ Send commands with RS low using LCD_WriteCmd.
+    @ send 0x03 nibble 3 times with requred delays
+    MOVS R0, #0x03
+    BL   LCD_SendNibble
+    BL   LCD_Pulse
+    MOVS R0, #5             @ Wait > 4.1 ms
+    BL   LCD_DelayLong
 
+    MOVS R0, #0x03
+    BL   LCD_SendNibble
+    BL   LCD_Pulse
+    MOVS R0, #150           @ Wait > 100 us
+    BL   LCD_DelayShort
+
+    MOVS R0, #0x03
+    BL   LCD_SendNibble
+    BL   LCD_Pulse
+    MOVS R0, #150           @ Wait > 100 us
+    BL   LCD_DelayShort
+
+    @sent 0x02 nibble
+    MOVS R0, #0x02
+    BL   LCD_SendNibble
+    BL   LCD_Pulse
+    MOVS R0, #150
+    BL   LCD_DelayShort
+
+    MOVS R0, #0x28
+    BL   LCD_WriteCmd
+
+    MOVS R0, #0x0C
+    BL   LCD_WriteCmd
+
+    @clear display and wait >1.52ms
+    MOVS R0, #0x01
+    BL   LCD_WriteCmd
+    MOVS R0, #2
+    BL   LCD_DelayLong
+
+    MOVS R0, #0x06
+    BL   LCD_WriteCmd
     POP {PC}
 
 @ ===========================================================================
@@ -72,15 +116,39 @@ LCD_Init:
 LCD_WriteCmd:
     PUSH {R0, LR}
     @ TODO 5: Drive RS (PC14) LOW, then fall through to the shared sender.
+    LDR  R1, =GPIOC_BSRR
+    MOVS R2, #1
+    LSLS R2, R2, #30        @ Bit 30 = BR14 (Reset PC14)
+    STR  R2, [R1]
+    B    LCD_Send8
 
     .type LCD_WriteData, %function
 LCD_WriteData:
     PUSH {R0, LR}
     @ TODO 6: Drive RS (PC14) HIGH, then fall through.
+    LDR  R1, =GPIOC_BSRR
+    MOVS R2, #1
+    LSLS R2, R2, #14        @ Bit 14 = BS14 (Set PC14)
+    STR  R2, [R1]
 
 LCD_Send8:
     @ TODO 7: Send the upper nibble of R0, pulse Enable,
     @         then the lower nibble of R0, pulse Enable again.
+
+    PUSH {R0}               @ Preserve full R0
+    LSRS R0, R0, #4         @ Extract high nibble (bits 7:4)
+    BL   LCD_SendNibble
+    BL   LCD_Pulse
+
+    POP  {R0}               @ Restore full R0
+    MOVS R1, #0x0F
+    ANDS R0, R0, R1         @ Extract low nibble (bits 3:0)
+    BL   LCD_SendNibble
+    BL   LCD_Pulse
+
+    @ Execution delay (most commands require ~37..40 us)
+    MOVS R0, #50
+    BL   LCD_DelayShort
 
     POP {R0, PC}
 
